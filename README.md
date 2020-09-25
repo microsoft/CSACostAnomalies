@@ -70,31 +70,23 @@ We can now work on setting up alerting on anamalies. In the below example we'll 
 
 <img src="./images/BlankTemplate.PNG" alt="Designer"  Width="200"> 
 
-2) The Logic App Designer will open with the trigger selection available. Look for **Storage Account** and select the **Azure Blob Storage**  
+2) The Logic App Designer will open with the trigger selection available. Select **Recurrence** 
 
-<img src="./images/SAAction.PNG" alt="Storage Account Action"  Width="200">  
+<img src="./images/Recurrence.PNG" alt="Recurrence Trigger"  Width="200">  
 
-3) Choose the **When a blob is added or midified** trigger  
+3) For the **Recurrence** trigger you'll want to configure this to run every 1 day and also you need to add the **Start Time** Property  
 
-<img src="./images/BlobTrigger.PNG" alt="Blob Modified Trigger"  Width="200">  
+<img src="./images/StartTime.PNG" alt="Start Time Property"  Width="200">  
 
-4) Being this is your first time connecting to a storage account you'll need to select the SA. Below I've named my connection CostStorage and then seleted the account I want to place the cost data into. Once selected you need to select **Create** at the bottom.
-
-<img src="./images/StorageSelection.PNG" alt="Storage Selection"  Width="400"> 
-
-5) In the **Container** property you need to put the folder where you placed the csv file. This was done in the **Add Management of Blob Output** step 8  
-
-<img src="./images/BlobModified.PNG" alt="Blob Modified"  Width="500">  
-
-6) Below your trigger click on **Add New Step** and look for **Azure Monitor**. You'll select the **Azure Monitor Logs**  
+4) Below your trigger click on **Add New Step** and look for **Azure Monitor**. You'll select the **Azure Monitor Logs**  
 
 <img src="./images/AzureMonitorSearch.PNG" alt="Azure Monitor Search"  Width="400">  
 
-7) Select the **Run Query and Visualize Results** action
+5) Select the **Run Query and Visualize Results** action
 
 <img src="./images/RunQueryVisualize.PNG" alt="Azure Monitor Search"  Width="300">  
 
-8) Fill in the Properties:  
+6) Fill in the Properties:  
 
 - Subscription: Suscription where the Log Analytics Workspace is located  
 - Resource Group: Resource Group where the Log Analytics Workspace is located  
@@ -102,24 +94,21 @@ We can now work on setting up alerting on anamalies. In the below example we'll 
 - Resource Name: Name of Log Analytics Workspace  
 - Query: Enter the below **Change the URI connection to the Blob csv file**  
 
-    let costdata=externaldata(UsageDateTime:datetime, MeterId:string, InstanceId:string, ResourceLocation:string,   PreTaxCost:decimal,ResourceGroup:string, ResourceType:string, Tags:string )  
-    [  
-    h@"**\<BlobURI\>\<SASToken\>**"  
-    ]  
-    with(format="csv",ignoreFirstRecord=true);  
-    let ids=costdata  
+    let ids=AzureCostAnamolies_CL  
+    | extend UsageDateTime = todatetime(Date_s)  
     | order by UsageDateTime  
-    | where PreTaxCost >= 5  
-    | make-series Cost=sum(PreTaxCost) on UsageDateTime in range(startofday(ago(90d)), endofday(ago(1d)), 1d) by ResourceGroup  
+    | where PreTaxCost_d >= 5  
+    | make-series Cost=sum(PreTaxCost_d) on UsageDateTime in range(startofday(ago(90d)), endofday(ago(1d)), 1d) by ResourceGroup  
     | extend outliers=series_decompose_anomalies(Cost)  
     | mvexpand outliers, UsageDateTime  
     | summarize arg_max(todatetime(UsageDateTime), *) by ResourceGroup  
     | where outliers>=1   
     | distinct ResourceGroup;  
-    costdata  
+    AzureCostAnamolies_CL  
+    | extend UsageDateTime = todatetime(Date_s)    
     | where ResourceGroup in (ids)  
     | where UsageDateTime >= ago(7d)  
-    | summarize PreTaxCost=sum(PreTaxCost) by ResourceGroup, UsageDateTime  
+    | summarize PreTaxCost=sum(PreTaxCost_d) by ResourceGroup, UsageDateTime  
     | order by ResourceGroup, UsageDateTime desc  
 
     - Time Range: 90d  
@@ -148,25 +137,22 @@ We can now work on setting up alerting on anamalies. In the below example we'll 
 
 13) Repeate steps 6-8 but ths time use the below query  
 
-    let costdata=externaldata(UsageDateTime:datetime, MeterId:string, InstanceId:string, ResourceLocation:string,   PreTaxCost:decimal,ResourceGroup:string, ResourceType:string, Tags:string )  
-    [  
-    h@"**\<BlobURI\>\<SASToken\>**"    
-    ]  
-    with(format="csv",ignoreFirstRecord=true);  
-    let ids=costdata  
+    let ids=AzureCostAnamolies_CL  
+    | extend UsageDateTime = todatetime(Date_s)  
     | order by UsageDateTime  
-    | where PreTaxCost >= 5  
-    | make-series Cost=sum(PreTaxCost) on UsageDateTime in range(startofday(ago(90d)), endofday(ago(1d)), 1d) by ResourceGroup  
+    | where PreTaxCost_d >= 5  
+    | make-series Cost=sum(PreTaxCost_d) on UsageDateTime in range(startofday(ago(90d)), endofday(ago(1d)), 1d) by ResourceGroup  
     | extend outliers=series_decompose_anomalies(Cost)  
     | mvexpand outliers, UsageDateTime  
     | summarize arg_max(todatetime(UsageDateTime), *) by ResourceGroup  
     | where outliers>=1  
     | distinct ResourceGroup;  
-    costdata  
+    AzureCostAnamolies_CL  
+    | extend UsageDateTime = todatetime(Date_s)  
     | where ResourceGroup in (ids)  
     | where UsageDateTime >= ago(7d)  
-    | summarize PreTaxCost=sum(PreTaxCost) by InstanceId, UsageDateTime  
-    | order by InstanceId, UsageDateTime desc  
+    | summarize PreTaxCost=sum(PreTaxCost_d) by ResourceId, UsageDateTime  
+    | order by ResourceId, UsageDateTime desc  
 
 14) Add a new action after the last step (but still in the **if true** section) and search for **Outlook**. Choose the **Office 365 Outllok** actions  
 
